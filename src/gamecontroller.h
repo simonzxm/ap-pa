@@ -45,6 +45,9 @@ public:
         double doubleStrikeChance = 0.0;
         double critChance = 0.0;
         int healBonus = 0;
+        int currentTargetRuntimeId = -1;
+        QString lastAction;
+        int actionTicks = 0;
     };
 
     explicit GameController(QObject *parent = nullptr);
@@ -149,7 +152,11 @@ private:
 
     bool mergeIfPossible(const UnitData &candidate);
 
-    QVariantMap unitToMap(const UnitData &u, bool forCombat, int hp, int mana) const;
+    QVariantMap unitToMap(const UnitData &u, bool forCombat, int hp, int mana,
+                          UnitState state = UnitState::Idle,
+                          const QString &lastAction = QString(),
+                          int targetX = -1,
+                          int targetY = -1) const;
     void writeJson(const QString &path) const;
     void readJson(const QString &path);
 };

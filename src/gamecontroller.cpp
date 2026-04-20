@@ -160,6 +160,23 @@ QString ownerName(Owner owner)
     return owner == Owner::Player ? "Player" : "Enemy";
 }
 
+QString stateName(UnitState state)
+{
+    switch (state) {
+    case UnitState::Idle:
+        return "Idle";
+    case UnitState::Moving:
+        return "Moving";
+    case UnitState::Attacking:
+        return "Attacking";
+    case UnitState::Casting:
+        return "Casting";
+    case UnitState::Dead:
+        return "Dead";
+    }
+    return "Idle";
+}
+
 }
 
 GameController::GameController(QObject *parent)
@@ -203,11 +220,13 @@ int GameController::deployedCount() const
 int GameController::round() const { return m_round; }
 QString GameController::phase() const
 {
-    if (m_phase == Phase::Prep) {
+    switch (m_phase) {
+    case Phase::Prep:
         return "Prep";
-    }
-    if (m_phase == Phase::Combat) {
+    case Phase::Combat:
         return "Combat";
+    case Phase::Resolve:
+        return "Resolve";
     }
     return "Resolve";
 }
@@ -231,9 +250,9 @@ void GameController::newGame()
     m_runtimeUnits.clear();
 
     m_playerHp = 100;
-    m_gold = 12;
+    m_gold = 14;
     m_level = 1;
-    m_populationCap = 3;
+    m_populationCap = 4;
     m_round = 1;
     m_phase = Phase::Prep;
     m_prepSecondsLeft = 20;
@@ -294,6 +313,9 @@ void GameController::moveUnit(const QString &fromArea, int fromIndex, const QStr
     if (m_phase != Phase::Prep) {
         return;
     }
+    if (fromArea == toArea && fromIndex == toIndex) {
+        return;
+    }
 
     std::optional<UnitData> *fromSlot = nullptr;
     std::optional<UnitData> *toSlot = nullptr;
@@ -320,11 +342,7 @@ void GameController::moveUnit(const QString &fromArea, int fromIndex, const QStr
         return;
     }
 
-    if (fromArea == "board" && toArea == "bench") {
-        std::swap(*fromSlot, *toSlot);
-    } else {
-        std::swap(*fromSlot, *toSlot);
-    }
+    std::swap(*fromSlot, *toSlot);
 
     for (int i = 0; i < m_board.size(); ++i) {
         if (m_board[i].has_value()) {
@@ -404,6 +422,7 @@ void GameController::buyUnit(int shopIndex)
     m_shop[shopIndex] = makeHero(ids[pick], Owner::Player);
 
     emit benchChanged();
+    emit boardChanged();
     emit shopChanged();
     emit gameStateChanged();
 }
@@ -471,15 +490,6 @@ int GameController::xyToIdx(int x, int y) const { return y * m_cols + x; }
 
 void GameController::updatePrepTimer()
 {
-    ++m_prepTickAccumulator;
-    if (m_prepTickAccumulator >= 10) {
-        m_prepTickAccumulator = 0;
-        --m_prepSecondsLeft;
-        emit gameStateChanged();
-        if (m_prepSecondsLeft <= 0) {
-            startCombat();
-        }
-    }
 }
 
 void GameController::startCombat()
@@ -711,11 +721,15 @@ void GameController::performAttack(int attackerIndex, int targetIndex)
     damage = qMax(1, damage - target.armor);
 
     target.hp -= damage;
+    target.lastAction = "Hit";
+    target.actionTicks = 4;
     attacker.mana = qMin(attacker.data.maxMana, attacker.mana + 10);
 
     if (QRandomGenerator::global()->generateDouble() < attacker.doubleStrikeChance) {
         target.hp -= damage;
     }
+    attacker.lastAction = "Attack";
+    attacker.actionTicks = 5;
 
     int atkTicks = attacker.data.attackIntervalTicks;
     if (attacker.data.hasEquipment) {
@@ -730,6 +744,9 @@ void GameController::castSkill(int casterIndex)
     const Skill *skill = skillForHero(caster.data.heroId);
     skill->cast(caster, m_runtimeUnits);
     caster.mana = 0;
+    caster.lastAction = "Cast";
+    caster.actionTicks = 8;
+    emit combatLog(QString("%1 cast %2").arg(caster.data.heroName, skill->name()));
 }
 
 void GameController::checkDeaths()
@@ -738,6 +755,7 @@ void GameController::checkDeaths()
         if (u.alive && u.hp <= 0) {
             u.alive = false;
             u.state = UnitState::Dead;
+            emit combatLog(QString("%1 fell").arg(u.data.heroName));
         }
     }
 }
@@ -760,6 +778,14 @@ void GameController::updateCombatTick()
             continue;
         }
 
+        if (u.actionTicks > 0) {
+            --u.actionTicks;
+            if (u.actionTicks == 0) {
+                u.lastAction.clear();
+            }
+        }
+        u.currentTargetRuntimeId = -1;
+
         if (u.stunnedTicks > 0) {
             --u.stunnedTicks;
             u.state = UnitState::Idle;
@@ -775,8 +801,10 @@ void GameController::updateCombatTick()
 
         const int targetIndex = chooseTargetIndex(i);
         if (targetIndex < 0) {
+            u.state = UnitState::Idle;
             continue;
         }
+        u.currentTargetRuntimeId = m_runtimeUnits[targetIndex].runtimeId;
 
         auto &target = m_runtimeUnits[targetIndex];
         const double dx = target.data.x - u.data.x;
@@ -799,6 +827,8 @@ void GameController::updateCombatTick()
                 if (step >= 0) {
                     u.data.x = idxToX(step);
                     u.data.y = idxToY(step);
+                    u.lastAction = "Move";
+                    u.actionTicks = 3;
                 }
                 u.moveCd = u.data.moveIntervalTicks;
             }
@@ -828,11 +858,11 @@ void GameController::endCombat(bool playerWon)
     } else {
         m_loseStreak += 1;
         m_winStreak = 0;
-        const int hpLoss = qMax(4, m_round + 2);
+        const int hpLoss = qMax(3, m_round + 1);
         m_playerHp -= hpLoss;
     }
 
-    const int baseReward = playerWon ? 8 : 4;
+    const int baseReward = playerWon ? 9 : 5;
     const int interest = qMin(5, m_gold / 10);
     const int streakBonus = playerWon ? qMin(4, m_winStreak / 2) : qMin(3, m_loseStreak / 2);
     m_gold += baseReward + interest + streakBonus;
@@ -852,7 +882,9 @@ void GameController::endCombat(bool playerWon)
     emit boardChanged();
 }
 
-QVariantMap GameController::unitToMap(const UnitData &u, bool forCombat, int hp, int mana) const
+QVariantMap GameController::unitToMap(const UnitData &u, bool forCombat, int hp, int mana,
+                                      UnitState state, const QString &lastAction,
+                                      int targetX, int targetY) const
 {
     QVariantMap m;
     m["heroId"] = u.heroId;
@@ -869,6 +901,10 @@ QVariantMap GameController::unitToMap(const UnitData &u, bool forCombat, int hp,
     m["y"] = u.y;
     m["traits"] = u.traits;
     m["equipment"] = u.hasEquipment ? u.equipment.name : "None";
+    m["state"] = stateName(state);
+    m["lastAction"] = lastAction;
+    m["targetX"] = targetX;
+    m["targetY"] = targetY;
     return m;
 }
 
@@ -893,7 +929,21 @@ QVariantList GameController::boardCells() const
                     continue;
                 }
                 if (ru.data.x == x && ru.data.y == y) {
-                    unit = unitToMap(ru.data, true, ru.hp, ru.mana);
+                    int targetX = -1;
+                    int targetY = -1;
+                    if (ru.currentTargetRuntimeId >= 0) {
+                        for (const auto &target : m_runtimeUnits) {
+                            if (!target.alive) {
+                                continue;
+                            }
+                            if (target.runtimeId == ru.currentTargetRuntimeId) {
+                                targetX = target.data.x;
+                                targetY = target.data.y;
+                                break;
+                            }
+                        }
+                    }
+                    unit = unitToMap(ru.data, true, ru.hp, ru.mana, ru.state, ru.lastAction, targetX, targetY);
                     break;
                 }
             }
@@ -1109,9 +1159,9 @@ void GameController::readJson(const QString &path)
     const auto root = doc.object();
 
     m_playerHp = root.value("playerHp").toInt(100);
-    m_gold = root.value("gold").toInt(10);
+    m_gold = root.value("gold").toInt(14);
     m_level = root.value("level").toInt(1);
-    m_populationCap = root.value("populationCap").toInt(3);
+    m_populationCap = root.value("populationCap").toInt(4);
     m_round = root.value("round").toInt(1);
     m_prepSecondsLeft = root.value("prepSecondsLeft").toInt(20);
     m_phase = Phase::Prep;
