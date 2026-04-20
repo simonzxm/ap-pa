@@ -1,0 +1,5 @@
+build/
+*.user
+*.qtc_clangd/
+*.autosave
+savegame.json
