@@ -83,7 +83,7 @@ ApplicationWindow {
                                 anchors.margins: 4
                                 radius: 4
                                 color: unitColor(modelData.unit)
-                                visible: modelData.unit && modelData.unit.name
+                                visible: !!(modelData.unit && modelData.unit.name)
 
                                 property string fromArea: "board"
                                 property int fromIndex: modelData.index
@@ -104,10 +104,10 @@ ApplicationWindow {
                                 Column {
                                     anchors.centerIn: parent
                                     spacing: 2
-                                    Label { text: modelData.unit.name; color: "white"; font.pixelSize: 10 }
-                                    Label { text: "★" + modelData.unit.star + "  ATK:" + modelData.unit.atk; color: "white"; font.pixelSize: 9 }
-                                    Label { text: "HP " + modelData.unit.hp + "/" + modelData.unit.maxHp; color: "white"; font.pixelSize: 9 }
-                                    Label { text: "MP " + modelData.unit.mana + "/" + modelData.unit.maxMana; color: "white"; font.pixelSize: 9 }
+                                    Label { text: modelData.unit && modelData.unit.name ? modelData.unit.name : ""; color: "white"; font.pixelSize: 10 }
+                                    Label { text: modelData.unit && modelData.unit.name ? "★" + modelData.unit.star + "  ATK:" + modelData.unit.atk : ""; color: "white"; font.pixelSize: 9 }
+                                    Label { text: modelData.unit && modelData.unit.name ? "HP " + modelData.unit.hp + "/" + modelData.unit.maxHp : ""; color: "white"; font.pixelSize: 9 }
+                                    Label { text: modelData.unit && modelData.unit.name ? "MP " + modelData.unit.mana + "/" + modelData.unit.maxMana : ""; color: "white"; font.pixelSize: 9 }
                                 }
 
                                 MouseArea {
@@ -169,7 +169,7 @@ ApplicationWindow {
                                     anchors.margins: 4
                                     radius: 4
                                     color: unitColor(modelData.unit)
-                                    visible: modelData.unit && modelData.unit.name
+                                    visible: !!(modelData.unit && modelData.unit.name)
 
                                     property string fromArea: "bench"
                                     property int fromIndex: modelData.index
@@ -189,8 +189,8 @@ ApplicationWindow {
 
                                     Column {
                                         anchors.centerIn: parent
-                                        Label { text: modelData.unit.name; color: "white"; font.pixelSize: 10 }
-                                        Label { text: "★" + modelData.unit.star; color: "white"; font.pixelSize: 9 }
+                                        Label { text: modelData.unit && modelData.unit.name ? modelData.unit.name : ""; color: "white"; font.pixelSize: 10 }
+                                        Label { text: modelData.unit && modelData.unit.name ? "★" + modelData.unit.star : ""; color: "white"; font.pixelSize: 9 }
                                     }
 
                                     MouseArea {
