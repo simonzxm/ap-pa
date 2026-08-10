@@ -8,7 +8,17 @@ endif()
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(raylib REQUIRED)
+include(FetchContent)
+
+set(BUILD_EXAMPLES OFF CACHE BOOL "Build raylib examples" FORCE)
+FetchContent_Declare(
+    raylib
+    GIT_REPOSITORY https://github.com/raysan5/raylib.git
+    GIT_TAG 5.5
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(raylib)
+
 find_package(Boost REQUIRED)
 find_package(Threads REQUIRED)
 
